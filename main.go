@@ -12,8 +12,15 @@ import (
 	"math/rand"
 )
 
+const empty = 0;
+const bullet = 1;
+const monster = 2;
+const explosion = 5;
+
+const ticker_sleep = 400;
+
 func main() {
-	tickChan := time.NewTicker(time.Millisecond * 200).C
+	tickChan := time.NewTicker(time.Millisecond * ticker_sleep).C
 
 	var path string
 	flag.StringVar(&path, "path", "/dev/input/event2", "path to the event device")
@@ -39,24 +46,27 @@ func main() {
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, os.Interrupt, os.Kill)
 
-	world := World{X: 7, Bullets: []Bullet{}}
+	zero := []int{0,0,0,0,0,0,0,0};
+	world := [][]int{zero, zero, zero, zero, zero, zero, zero, zero}
 	x := 7
 	y := 7
 
-	z := 0
-
+	z := 0;
 	for {
 		select {
 		case <-tickChan:
-			updateBullets(&world, fb)
-			detectExplosions(&world, fb)
+			fmt.Println("Updating the world! ")
+			updateWorld(world, fb)
 			z = z + 1
-			if ((z % 3) == 0) {
-				updateMonsters(&world, fb)
-				detectExplosions(&world, fb)
-			}
-			if ((z % 8) == 0) {
-				createMonster(&world, fb)
+			if z % 5 == 0 {
+
+				monsterX := rand.Int() % 8
+				monsterX = 0
+				tmp := []int{0,0,0,0,0,0,0,0};
+				copy(tmp, world[monsterX]);
+				tmp[0] = monster
+				world[monsterX] = tmp
+				fmt.Println("added a monster: ", world[monsterX], " MonsterX, " , monsterX  )
 			}
 
 		case <-signals:
@@ -69,158 +79,102 @@ func main() {
 			switch e.Code {
 
 			case stick.Up:
-				fmt.Println("Shoot!")
-				b := Bullet{X: world.X, Y: 7, Color: color.Blue, Explode:false}
-				world.Bullets = append(world.Bullets, b)
+				tmp := []int{0,0,0,0,0,0,0,0};
+
+				copy(tmp, world[x]);
+				tmp[6] = bullet
+				world[x] = tmp
+				fmt.Println("ADDING A BULLET: ", world[x], " bullet x, " , x  )
 
 			case stick.Right:
-				//fmt.Println("1. L: ", x, " y ", y)
-				fb.SetPixel(x, y, color.New(0, 0, 0))
+				fmt.Println("1. L: ", x, " y ", y)
 				x = (x + 1) % 8
 				if x < 0 {
 					x = x - 8
 				}
-				world.X = x
+
 			case stick.Left:
-				//fmt.Println("1. R: ", x, " y ", y)
-				fb.SetPixel(x, y, color.New(0, 0, 0))
+				fmt.Println("1. R: ", x, " y ", y)
 				x = (x - 1) % 8
 				if x < 0 {
 					x = x + 8
 				}
-				world.X = x
 			}
 		}
-		drawWorld(world, fb)
+		drawWorld(x, world, fb)
 	}
 }
 
-func updateBullets(world *World, fb *screen.FrameBuffer) {
+func updateWorld(world [][]int, fb *screen.FrameBuffer) {
 
-	remainingBullets := []Bullet{}
-
-	for i := 0; i < len(world.Bullets); i++ {
-		b := world.Bullets[i]
-		x := (b.X)
-		y := (b.Y)
-		fb.SetPixel(x, y, color.New(0, 0, 0))
-
-		yy := y - 1
-		if b.Explode {
-			fb.SetPixel(x, y, color.New(255,255,0))
-		} else if x >= 0 && yy >= 0 {
-			bullet := Bullet{X: x, Y: yy, Color: color.Blue}
-			remainingBullets = append(remainingBullets, bullet)
-			fb.SetPixel(x, yy, b.Color)
-		}
-	}
-	world.Bullets = remainingBullets
-}
-
-func detectExplosions(world *World, fb *screen.FrameBuffer) {
-	for i := 0; i < len(world.Bullets); i++ {
-		bullet := &world.Bullets[i]
-
-		for x := 0;  x < len(world.Monsters); x++ {
-			monster := &world.Monsters[x]
-			if (bullet.Y == monster.Y && bullet.X == monster.X)  {
-				//fmt.Println("detected explosion! Monster.Y:", monster.Y, " monster.X ", monster.X,
-				//	" bullet.Y ", bullet.Y, " bullet.X  ", bullet.X)
-
-				monster.Explode = true
-				bullet.Explode = true
+	for x := 0; x <= 7; x ++  { // iterate the x-axis
+ 		oldY := world[x];
+		newY := []int{0,0,0,0,0,0,0,0};
+		for  y := 0 ;  y <= 7 ; y ++ { // move down the monsters in the matrix.
+			if y == 7 {
+				break;
+			}
+			if oldY[y] == monster {
+				newY[y+1] = monster
 			}
 		}
+		if x == 0{
+			fmt.Println("Moved the monsters  ", oldY, " newY ", newY)
+		}
+
+		// Was there any collisions with the bullets?
+		for  y := 0 ;  y <= 7 ; y ++ {
+
+			if newY[y] == monster && oldY[y] == bullet {
+				fmt.Println("Detected explosion oldY ", oldY, " newY ", newY)
+				newY[y] = explosion
+				oldY[y] = 0;
+			}
+		}
+
+
+		for  y := 6 ; y > 0; y-- { // move the bullets
+			if y == 0 {
+				break;
+			}
+			if oldY[y]  == bullet && newY[y] == monster {
+				newY[y] = explosion
+
+			} else if oldY[y] == bullet {
+				newY[y-1] = bullet
+			}
+		}
+		if x == 0 {
+			fmt.Println("Moved the Bullets:  ", oldY, " newY ", newY)
+		}
+		world[x] = newY;
+
 	}
 }
 
 
-func updateMonsters(world *World, fb *screen.FrameBuffer) {
-	remainingMonsters := []Monster{}
+func drawWorld(spaceship int, world [][]int, fb *screen.FrameBuffer) {
+	for x := 0; x <= 7; x ++ {
 
-	for i := 0; i < len(world.Monsters); i++ {
-		m := world.Monsters[i]
-		x := m.X
-		y := m.Y
+		for  y:= 0 ; y <=  7; y++ {
+			if world[x][y]  == monster {
+				fmt.Println("Rendering a monster x:" ,x, " y: ",y)
+				fb.SetPixel(x, y, color.Red)
 
-		counter := m.Counter
+			} else if world[x][y]  == bullet {
+				fmt.Println("Rendering a bullet x:" ,x, " y: ",y)
+				fb.SetPixel(x, y, color.Blue)
+			} else if world[x][y]  == explosion {
+				fmt.Println("Rendering a explosion x:" ,x, " y: ",y)
+				fb.SetPixel(x, y, color.New(255,255,0))
 
-		if m.Explode  && counter >= 0{
-
-			//fmt.Println("12. Render explosion! monsterY:", y, " M.X ", x, " counter: ", counter)
-
-			expColor := color.New(255, 255, 0)
-
-			if (m.Counter <= 10) {
-				expColor = color.New(255, 153, 0)
+			} else {
+				fb.SetPixel(x, y, color.New(0, 0, 0))
 			}
 
-			fb.SetPixel(x, y, expColor) // yellow
-			m := Monster{X: x, Y: y, Color: expColor, Explode: true, Counter: (counter - 1) }
-			remainingMonsters = append(remainingMonsters, m)
-
-		} else {
-			fb.SetPixel(x, y, color.New(0, 0, 0))
-		}
-
-
-		yy := y + 1
-
-		if !m.Explode && x < 8 && yy < 8 {
-			m := Monster{X: x, Y: yy, Color: color.Red}
-			remainingMonsters = append(remainingMonsters, m)
-			fb.SetPixel(x, yy, m.Color)
 		}
 	}
-	world.Monsters = remainingMonsters
-}
-
-func drawWorld(world World, fb *screen.FrameBuffer) {
-	fb.SetPixel(world.X, 7, color.Green)
+	fb.SetPixel(spaceship, 7, color.Green)
 	screen.Draw(fb)
 }
-
-func createMonster(world *World, fb *screen.FrameBuffer) {
-	//fmt.Println("Monster!")
-	x := rand.Int() % 8
-	y := 0
-
-	for  {
-		if ( world.PreviousMonsterX == x) {
-			x = rand.Int() % 8
-		} else {
-			break
-		}
-	}
-
-	world.PreviousMonsterX = x;
-
-	m := Monster{X: x, Y: y, Color: color.Red, Explode: false, Counter: 20}
-	world.Monsters = append(world.Monsters, m)
-
-	fb.SetPixel(m.X, m.Y, m.Color)
-}
-
-type Bullet struct {
-	X     int
-	Y     int
-	Color color.Color
-	Explode bool
-}
-
-type Monster struct {
-	X     int
-	Y     int
-	Explode bool
-	Counter int
-	Color color.Color
-}
-
-type World struct {
-	X       int
-	Bullets []Bullet
-	Monsters []Monster
-	PreviousMonsterX  int
-}
-
 
