@@ -48,34 +48,32 @@ func main() {
 
 	zero := []int{0,0,0,0,0,0,0,0};
 	world := [][]int{zero, zero, zero, zero, zero, zero, zero, zero}
+
 	x := 7
-	y := 7
 	z := -1;
 	for {
 		select {
 		case <-tickChan:
-			fmt.Println("Updating the world! ")
-			gameOver := updateWorld(world, z)
-			if gameOver {
-				itsGameOver(world)
-				drawWorld(x, world, fb)
-				time.Sleep(time.Second * 3)
-				screen.Clear()
-				return
-			}
 			z = z + 1
-			if z % 8 == 0 {
-
+			updateWorld(world, z)
+			//
+			//if gameOver  {
+			//	//itsGameOver(world)
+			//	//drawWorld(x, world, fb)
+			//	//time.Sleep(time.Second * 3)
+			//	//screen.Clear()
+			//	//return
+			//}
+			if z % 4 == 0 {
+				// Adding a monster!
 				monsterX := rand.Int() % 8
 				tmp := []int{0,0,0,0,0,0,0,0};
 				copy(tmp, world[monsterX]);
 				tmp[0] = monster
 				world[monsterX] = tmp
-				fmt.Println("added a monster: ", world[monsterX], " MonsterX, " , monsterX  )
 			}
 
 		case <-signals:
-			fmt.Println("EXIT")
 			screen.Clear()
 
 			// Exit the loop
@@ -85,21 +83,18 @@ func main() {
 
 			case stick.Up:
 				tmp := []int{0,0,0,0,0,0,0,0};
-
 				copy(tmp, world[x]);
 				tmp[6] = bullet
 				world[x] = tmp
-				fmt.Println("ADDING A BULLET: ", world[x], " bullet x, " , x  )
-
 			case stick.Right:
-				fmt.Println("1. L: ", x, " y ", y)
+				//fmt.Println("1. L: ", x, " y ", y)
 				x = (x + 1) % 8
 				if x < 0 {
 					x = x - 8
 				}
 
 			case stick.Left:
-				fmt.Println("1. R: ", x, " y ", y)
+				//fmt.Println("1. R: ", x, " y ", y)
 				x = (x - 1) % 8
 				if x < 0 {
 					x = x + 8
@@ -115,9 +110,9 @@ func updateWorld(world [][]int, z int) bool {
 	for x := 0; x <= 7; x ++  { // iterate the x-axis
  		oldY := world[x];
 
-		if oldY[7] == monster {
-			return true  // GAME OVER
-		}
+		//if oldY[7] == monster {
+		//	return true  // GAME OVER
+		//}
 
 		newY := []int{0,0,0,0,0,0,0,0};
 		if z % monsterUpdateModulo == 0 { // hack to manage the monster vs bullet speed.
@@ -128,9 +123,6 @@ func updateWorld(world [][]int, z int) bool {
 				if oldY[y] == monster {
 					newY[y+1] = monster
 				}
-			}
-			if x == 0{
-				fmt.Println("Moved the monsters  ", oldY, " newY ", newY)
 			}
 		} else {
 			copy(newY, oldY)
@@ -145,7 +137,6 @@ func updateWorld(world [][]int, z int) bool {
 		for  y := 0 ;  y <= 7 ; y ++ {
 
 			if newY[y] == monster && oldY[y] == bullet {
-				fmt.Println("Detected explosion oldY ", oldY, " newY ", newY)
 				newY[y] = explosion
 				oldY[y] = 0;
 			}
@@ -158,21 +149,15 @@ func updateWorld(world [][]int, z int) bool {
 				break;
 			}
 			if oldY[y]  == bullet && newMonsters[y] == monster {
-				fmt.Println("1. Detected Explosion!! newMonsters: ", newMonsters , " oldY ", oldY )
-
 				newY[y] = explosion
 
 			} else if oldY[y] == bullet && newMonsters[y-1] == monster{
-				fmt.Println("2. Detected Explosion!! newMonsters: ", newMonsters , " oldY ", oldY )
 				newY[y-1] = explosion
 			} else {
 				if oldY[y] == bullet {
 					newY[y-1] = bullet
 				}
 			}
-		}
-		if x == 0 {
-			fmt.Println("Moved the Bullets:  ", oldY, " newY ", newY, " newMonsters ", newMonsters)
 		}
 
 		world[x] = newY;
