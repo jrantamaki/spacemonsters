@@ -15,12 +15,13 @@ import (
 const bullet = 1;
 const monster = 2;
 const explosion = 5;
-const mayhem = -1
-const ticker_sleep = 200;
-const monsterUpdateModulo = 2;
+const update_world_interval = 230;
+const render_interval = 50;
+const monsterUpdateModulo = 2; // speed of monsters in relation to bullets
+const randomSleepBetweenMonsters = 400;
+const constantSleepBetweenMonsters = 650;
 
 func main() {
-	tickChan := time.NewTicker(time.Millisecond * ticker_sleep).C
 
 	var path string
 	flag.StringVar(&path, "path", "/dev/input/event2", "path to the event device")
@@ -46,32 +47,67 @@ func main() {
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, os.Interrupt, os.Kill)
 
+	// Tick channel to handle periodic updating.
+	tickChan := time.NewTicker(time.Millisecond * update_world_interval).C
+
+	renderChan := time.NewTicker(time.Millisecond * render_interval).C
+
 	zero := []int{0,0,0,0,0,0,0,0};
 	world := [][]int{zero, zero, zero, zero, zero, zero, zero, zero}
 
 	x := 7
 	z := -1;
+
+
+	go func()  {
+		fmt.Println("Starting the update the world ")
+		for {
+			select {
+			case <-tickChan:
+				z = z + 1
+				updateWorld(world, z)
+			}
+		}
+	}()
+
+	go func()  {
+		fmt.Println("Starting the rendering channel!")
+		for {
+			select {
+			case <-renderChan:
+				drawWorld(x, world, fb)
+			}
+		}
+	}()
+
+	go func()  {
+		fmt.Println("Starting the monster engine")
+		oldX := -1
+		monsterX := rand.Int() % 8
+		for {
+			for {
+				monsterX = (rand.Int() % 8)
+				if monsterX != oldX {
+					break;
+				}
+
+			}
+
+			oldX = monsterX
+
+			tmp := []int{0, 0, 0, 0, 0, 0, 0, 0};
+			copy(tmp, world[monsterX]);
+			tmp[0] = monster
+			world[monsterX] = tmp
+			sleep := rand.Int31n(randomSleepBetweenMonsters) + constantSleepBetweenMonsters
+
+			time.Sleep(time.Duration(sleep) * time.Millisecond)
+		}
+	}()
+
+
 	for {
 		select {
-		case <-tickChan:
-			z = z + 1
-			updateWorld(world, z)
-			//
-			//if gameOver  {
-			//	//itsGameOver(world)
-			//	//drawWorld(x, world, fb)
-			//	//time.Sleep(time.Second * 3)
-			//	//screen.Clear()
-			//	//return
-			//}
-			if z % 4 == 0 {
-				// Adding a monster!
-				monsterX := rand.Int() % 8
-				tmp := []int{0,0,0,0,0,0,0,0};
-				copy(tmp, world[monsterX]);
-				tmp[0] = monster
-				world[monsterX] = tmp
-			}
 
 		case <-signals:
 			screen.Clear()
@@ -101,18 +137,13 @@ func main() {
 				}
 			}
 		}
-		drawWorld(x, world, fb)
 	}
 }
 
-func updateWorld(world [][]int, z int) bool {
+func updateWorld(world [][]int, z int) {
 
 	for x := 0; x <= 7; x ++  { // iterate the x-axis
  		oldY := world[x];
-
-		//if oldY[7] == monster {
-		//	return true  // GAME OVER
-		//}
 
 		newY := []int{0,0,0,0,0,0,0,0};
 		if z % monsterUpdateModulo == 0 { // hack to manage the monster vs bullet speed.
@@ -163,7 +194,6 @@ func updateWorld(world [][]int, z int) bool {
 		world[x] = newY;
 
 	}
-	return false
 }
 
 
@@ -176,11 +206,7 @@ func drawWorld(spaceship int, world [][]int, fb *screen.FrameBuffer) {
 			} else if world[x][y]  == bullet {
 				fb.SetPixel(x, y, color.Blue)
 			} else if world[x][y]  == explosion {
-				fb.SetPixel(x, y, color.New(255,255,0))
-
-			} else if world[x][y]  == mayhem {
-				fb.SetPixel(x, y, color.New(244,66,241))
-
+				fb.SetPixel(x, y, color.New(255, 255, 0))
 			} else {
 				fb.SetPixel(x, y, color.New(0, 0, 0))
 			}
@@ -188,10 +214,4 @@ func drawWorld(spaceship int, world [][]int, fb *screen.FrameBuffer) {
 	}
 	fb.SetPixel(spaceship, 7, color.Green)
 	screen.Draw(fb)
-}
-
-func itsGameOver(world [][]int) {
-	for x := 0; x <= 7; x ++ {
-		world[x] =  []int{mayhem,mayhem,mayhem,mayhem,mayhem,mayhem,mayhem,mayhem};
-	}
 }
